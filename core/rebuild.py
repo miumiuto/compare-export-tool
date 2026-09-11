@@ -88,7 +88,7 @@ HIGHLIGHT_COUNTRIES = {
 LINE_H   = 15.5
 PAD      = 4.0
 MIN_H    = 15.0
-WRAP_CAP = 90
+WRAP_CAP = 115
 
 # ── keyword helpers (analysis sheets) ─────────────────────────────────────
 BID_BUDGET_KW  = ('出价', '预算', 'TROAS')
@@ -776,14 +776,11 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
             out_row[0] += 1
 
         def wr_row(label, parts):
-            for i, part in enumerate(parts):
-                row_label = label if i == 0 else ''
-                ca = ws.cell(out_row[0], 1, row_label)
-                cb = ws.cell(out_row[0], 2)
-                cb.value = build_rich_cell([part])
-                ca.font = CTY_FONT; ca.alignment = COL_A_ALIGN
-                cb.font = ANALY_FONT; cb.alignment = COL_B_ALIGN
-                out_row[0] += 1
+            ca = ws.cell(out_row[0], 1, label); cb = ws.cell(out_row[0], 2)
+            cb.value = build_rich_cell(parts)
+            ca.font = CTY_FONT;  ca.alignment = COL_A_ALIGN
+            cb.font = ANALY_FONT; cb.alignment = COL_B_ALIGN
+            out_row[0] += 1
 
         for category in CATEGORIES:
             has_data = any(bool(grouped.get(ar, {}).get(category)) for ar in region_order)
