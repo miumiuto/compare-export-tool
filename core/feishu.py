@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import re
+import datetime
 import requests
 
 APP_ID      = 'cli_a9745bcb34b99cce'
@@ -154,3 +156,32 @@ def load_all_data() -> tuple:
             })
 
     return all_campaigns, country_total_ai
+
+
+def get_campaign_period() -> tuple:
+    """
+    Read spreadsheet metainfo, find the sheet named like 'Campaign对比 09-11 17点',
+    and return (date_str, period) e.g. ('2026-09-11', '17').
+    Falls back to (None, None) if not found.
+    """
+    try:
+        token = get_token()
+        url = (f'https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/'
+               f'{SHEET_TOKEN}/metainfo')
+        r = requests.get(url, headers={'Authorization': f'Bearer {token}'}, timeout=15)
+        r.raise_for_status()
+        sheets = r.json().get('data', {}).get('sheets', [])
+        pat = re.compile(r'Campaign对比\s+(\d{1,2}-\d{1,2})\s+(\d{1,2})点')
+        for sheet in sheets:
+            m = pat.search(sheet.get('title', ''))
+            if m:
+                md = m.group(1).split('-')
+                month_day = f'{int(md[0]):02d}-{int(md[1]):02d}'
+                hour = int(m.group(2))
+                period = '17' if hour >= 13 else '09'
+                year = datetime.date.today().year
+                date_str = f'{year}-{month_day}'
+                return date_str, period
+    except Exception:
+        pass
+    return None, None

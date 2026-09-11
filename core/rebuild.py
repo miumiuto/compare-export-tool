@@ -800,10 +800,12 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
 
                 wr_header(a_region, REG_FONT, ANALY_REGION_FILL)
 
-                # region TOTAL (Android only)
-                rtm = sum_metrics(all_android_in_region)
-                if rtm['cost_y'] != 0 or rtm['cost_t'] != 0:
-                    wr_row('TOTAL', [(_make_ov_prefix(rtm), DEFAULT_REMARK, False, False)])
+                # region TOTAL only when more than 1 country has Android data
+                android_country_count = len({c['b_country'] for c in all_android_in_region})
+                if android_country_count > 1:
+                    rtm = sum_metrics(all_android_in_region)
+                    if rtm['cost_y'] != 0 or rtm['cost_t'] != 0:
+                        wr_row('TOTAL', [(_make_ov_prefix(rtm), DEFAULT_REMARK, False, False)])
 
                 for bc in country_map:
                     all_c    = country_map[bc]

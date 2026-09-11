@@ -2,7 +2,7 @@
 import io
 import datetime
 import streamlit as st
-from core.feishu import load_all_data
+from core.feishu import load_all_data, get_campaign_period
 from core.rebuild import rebuild_from_feishu
 
 st.set_page_config(page_title='分析导出', layout='centered')
@@ -65,9 +65,11 @@ if st.button('读取飞书 · 生成导出版 →', type='primary', use_containe
             st.stop()
 
     now = datetime.datetime.now()
-    hour = now.hour
-    period = '09' if hour < 13 else '17'
-    out_name = f'Compare-{now.strftime("%Y-%m-%d")}_{period}_数据分析.xlsx'
+    date_str, period = get_campaign_period()
+    if not date_str:
+        period = '09' if now.hour < 13 else '17'
+        date_str = now.strftime('%Y-%m-%d')
+    out_name = f'Compare-{date_str}_{period}_数据分析.xlsx'
 
     st.download_button(
         label=f'DOWNLOAD ↓ {out_name}',
