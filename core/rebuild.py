@@ -88,7 +88,7 @@ HIGHLIGHT_COUNTRIES = {
 LINE_H   = 15.5
 PAD      = 4.0
 MIN_H    = 15.0
-WRAP_CAP = 55
+WRAP_CAP = 90
 
 # ── keyword helpers (analysis sheets) ─────────────────────────────────────
 BID_BUDGET_KW  = ('出价', '预算', 'TROAS')
@@ -740,11 +740,12 @@ def build_rich_cell(line_parts):
                 blocks[-1] = TextBlock(last.font, last.text + '\n')
             else:
                 blocks[-1] = str(last) + '\n'
-        fn = _font(is_bb, is_nr) if (is_bb or is_nr) else _base
+        fn_p = _font(False, is_nr)          # prefix: never bold, red only if new_restart
+        fn_r = _font(is_bb, is_nr)          # remark: bold if bid_budget, red if new_restart
         if p:
-            blocks.append(TextBlock(fn, p))
+            blocks.append(TextBlock(fn_p if (is_nr) else _base, p))
         if r:
-            blocks.append(TextBlock(fn, r))
+            blocks.append(TextBlock(fn_r if (is_bb or is_nr) else _base, r))
     return CellRichText(blocks)
 
 def _cell_text(v):
@@ -840,9 +841,7 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
                         if not (bc in KEY_COUNTRIES or abnormal_cp or ios_c or country_ai):
                             continue
                         parts = [ov_part]
-                        if bc in KEY_COUNTRIES:
-                            parts.extend(all_cp)
-                        else:
+                        if bc not in KEY_COUNTRIES:
                             parts.extend(abnormal_cp)
                         if ios_ov:
                             parts.append(ios_ov)
