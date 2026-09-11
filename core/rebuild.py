@@ -19,9 +19,9 @@ from .feishu import DEFAULT_REMARK
 
 # ── layout constants ───────────────────────────────────────────────────────
 SHEET_DEFS = [
-    ('数据分析-SEA',  ['SEA'],                                True),
-    ('数据分析-美洲', ['LATAM', 'NA'],                        True),
-    ('数据分析-东欧', ['EEU'],                                True),
+    ('数据分析-SEA',  ['SEA'],                                False),
+    ('数据分析-美洲', ['LATAM', 'NA'],                        False),
+    ('数据分析-东欧', ['EEU'],                                False),
     ('数据分析',      ['WEU', 'MENA', 'GLOBAL', 'SA', 'AF'], True),
 ]
 CATEGORIES = ('Newinstall', 'Reattribution', 'Active')
