@@ -728,8 +728,12 @@ def build_rich_cell(line_parts):
     _red = InlineFont(rFont='等线', sz=10, color='FF0000')
     blocks = []
     for i, (p, r, is_bb, is_nr) in enumerate(line_parts):
-        if i > 0:
-            blocks.append('\n')
+        if i > 0 and blocks:
+            last = blocks[-1]
+            if isinstance(last, TextBlock):
+                blocks[-1] = TextBlock(last.font, last.text + '\n')
+            else:
+                blocks[-1] = str(last) + '\n'
         if p:
             blocks.append(TextBlock(_reg, p))
         if r:
