@@ -19,9 +19,9 @@ from .feishu import DEFAULT_REMARK
 
 # ── layout constants ───────────────────────────────────────────────────────
 SHEET_DEFS = [
-    ('数据分析-SEA',  ['SEA'],                                False),
-    ('数据分析-美洲', ['LATAM', 'NA'],                        False),
-    ('数据分析-东欧', ['EEU'],                                False),
+    ('数据分析-SEA',  ['SEA'],                                True),
+    ('数据分析-美洲', ['LATAM', 'NA'],                        True),
+    ('数据分析-东欧', ['EEU'],                                True),
     ('数据分析',      ['WEU', 'MENA', 'GLOBAL', 'SA', 'AF'], True),
 ]
 CATEGORIES = ('Newinstall', 'Reattribution', 'Active')
@@ -724,8 +724,14 @@ def _make_cp_prefix(camp):
 def build_rich_cell(line_parts):
     if not any(bb or nr for _, _, bb, nr in line_parts):
         return '\n'.join((p or '') + (r or '') for p, r, b, red in line_parts)
-    _reg = InlineFont(rFont='等线', sz=10)
-    _red = InlineFont(rFont='等线', sz=10, color='FF0000')
+
+    def _font(is_bb, is_nr):
+        kwargs = {'rFont': '等线', 'sz': 10}
+        if is_bb: kwargs['b'] = True
+        if is_nr: kwargs['color'] = 'FF0000'
+        return InlineFont(**kwargs)
+
+    _base = InlineFont(rFont='等线', sz=10)
     blocks = []
     for i, (p, r, is_bb, is_nr) in enumerate(line_parts):
         if i > 0 and blocks:
@@ -734,10 +740,11 @@ def build_rich_cell(line_parts):
                 blocks[-1] = TextBlock(last.font, last.text + '\n')
             else:
                 blocks[-1] = str(last) + '\n'
+        fn = _font(is_bb, is_nr) if (is_bb or is_nr) else _base
         if p:
-            blocks.append(TextBlock(_reg, p))
+            blocks.append(TextBlock(fn, p))
         if r:
-            blocks.append(TextBlock(_red if (is_bb or is_nr) else _reg, r))
+            blocks.append(TextBlock(fn, r))
     return CellRichText(blocks)
 
 def _cell_text(v):
