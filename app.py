@@ -64,8 +64,10 @@ if st.button('读取飞书 · 生成导出版 →', type='primary', use_containe
                 st.code(traceback.format_exc())
             st.stop()
 
-    now      = datetime.datetime.now().strftime('%Y%m%d_%H')
-    out_name = f'Compare-{now}_数据分析_导出版.xlsx'
+    now = datetime.datetime.now()
+    hour = now.hour
+    period = '09' if hour < 13 else '17'
+    out_name = f'Compare-{now.strftime("%Y-%m-%d")}_{period}_数据分析.xlsx'
 
     st.download_button(
         label=f'DOWNLOAD ↓ {out_name}',

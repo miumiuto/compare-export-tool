@@ -86,9 +86,9 @@ HIGHLIGHT_COUNTRIES = {
 
 # ── row-height constants (analysis sheets) ────────────────────────────────
 LINE_H   = 15.5
-PAD      = 10.0
+PAD      = 4.0
 MIN_H    = 15.0
-WRAP_CAP = 100
+WRAP_CAP = 55
 
 # ── keyword helpers (analysis sheets) ─────────────────────────────────────
 BID_BUDGET_KW  = ('出价', '预算', 'TROAS')
@@ -753,6 +753,9 @@ def _cell_text(v):
     return str(v) if v is not None else ''
 
 
+def is_ios_camp(camp):
+    return '-IOS-' in camp['e_name'].upper()
+
 def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
     grouped: dict = defaultdict(lambda: defaultdict(OrderedDict))
     for camp in all_campaigns:
@@ -786,36 +789,36 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
             for a_region in region_order:
                 if a_region not in grouped or category not in grouped[a_region]: continue
                 country_map = grouped[a_region][category]
-                android_bcs = [bc for bc in country_map if not bc.upper().endswith('_IOS')]
-                all_android  = [c for bc in android_bcs for c in country_map[bc]]
-                if not all_android: continue
+
+                # split iOS from Android at region level
+                all_android_in_region = [
+                    c for bcs in country_map.values() for c in bcs
+                    if not is_ios_camp(c)
+                ]
+                if not all_android_in_region: continue
 
                 wr_header(a_region, REG_FONT, ANALY_REGION_FILL)
 
-                # region TOTAL
-                rtm = sum_metrics(all_android)
+                # region TOTAL (Android only)
+                rtm = sum_metrics(all_android_in_region)
                 if rtm['cost_y'] != 0 or rtm['cost_t'] != 0:
                     wr_row('TOTAL', [(_make_ov_prefix(rtm), DEFAULT_REMARK, False, False)])
 
-                for bc in android_bcs:
-                    android_c = country_map[bc]
-                    ios_b     = bc + '_IOS'
-                    ios_c     = country_map.get(ios_b, [])
+                for bc in country_map:
+                    all_c    = country_map[bc]
+                    android_c = [c for c in all_c if not is_ios_camp(c)]
+                    ios_c     = [c for c in all_c if is_ios_camp(c)]
 
-                    am = sum_metrics(android_c)
+                    if not android_c and not ios_c:
+                        continue
+
+                    am = sum_metrics(android_c) if android_c else sum_metrics(ios_c)
                     country_ai_raw = country_total_ai.get((a_region, bc, category), '')
                     country_ai = country_ai_raw if is_real_ai(country_ai_raw) else None
 
                     ai_for_ov = country_ai_raw or DEFAULT_REMARK
                     ov_part   = (_make_ov_prefix(am), ai_for_ov,
                                  is_bid_budget(ai_for_ov), is_new_restart(ai_for_ov))
-
-                    ios_ov = None
-                    if ios_c:
-                        im = sum_metrics(ios_c)
-                        ios_ai = country_total_ai.get((a_region, ios_b, category), '') or DEFAULT_REMARK
-                        ios_ov = (_make_ov_prefix(im, ios=True), ios_ai,
-                                  is_bid_budget(ios_ai), is_new_restart(ios_ai))
 
                     all_cp, abnormal_cp = [], []
                     for camp in android_c:
@@ -825,30 +828,29 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
                         all_cp.append(part)
                         if is_real_ai(camp['ai']): abnormal_cp.append(part)
 
-                    ios_cp = []
-                    for camp in ios_c:
-                        ai = camp['ai'] or DEFAULT_REMARK
-                        if is_paused(ai): continue
-                        if is_real_ai(camp['ai']):
-                            ios_cp.append((_make_cp_prefix(camp), ai,
-                                           is_bid_budget(ai), is_new_restart(ai)))
+                    # iOS total line (aggregate, placed at bottom)
+                    ios_ov = None
+                    if ios_c:
+                        im = sum_metrics(ios_c)
+                        ios_ai = DEFAULT_REMARK
+                        ios_ov = (_make_ov_prefix(im, ios=True), ios_ai,
+                                  is_bid_budget(ios_ai), is_new_restart(ios_ai))
 
                     if filter_structure:
                         if not (bc in KEY_COUNTRIES or abnormal_cp or ios_c or country_ai):
                             continue
                         parts = [ov_part]
-                        if ios_ov: parts.append(ios_ov)
-                        # KEY_COUNTRIES: show ALL non-paused campaigns
                         if bc in KEY_COUNTRIES:
                             parts.extend(all_cp)
                         else:
                             parts.extend(abnormal_cp)
-                        parts.extend(ios_cp)
+                        if ios_ov:
+                            parts.append(ios_ov)
                     else:
                         parts = [ov_part]
-                        if ios_ov: parts.append(ios_ov)
                         parts.extend(all_cp)
-                        parts.extend(ios_cp)
+                        if ios_ov:
+                            parts.append(ios_ov)
 
                     wr_row(bc, parts)
 
