@@ -776,11 +776,14 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
             out_row[0] += 1
 
         def wr_row(label, parts):
-            ca = ws.cell(out_row[0], 1, label); cb = ws.cell(out_row[0], 2)
-            cb.value = build_rich_cell(parts)
-            ca.font = CTY_FONT;  ca.alignment = COL_A_ALIGN
-            cb.font = ANALY_FONT; cb.alignment = COL_B_ALIGN
-            out_row[0] += 1
+            for i, part in enumerate(parts):
+                row_label = label if i == 0 else ''
+                ca = ws.cell(out_row[0], 1, row_label)
+                cb = ws.cell(out_row[0], 2)
+                cb.value = build_rich_cell([part])
+                ca.font = CTY_FONT; ca.alignment = COL_A_ALIGN
+                cb.font = ANALY_FONT; cb.alignment = COL_B_ALIGN
+                out_row[0] += 1
 
         for category in CATEGORIES:
             has_data = any(bool(grouped.get(ar, {}).get(category)) for ar in region_order)
@@ -838,10 +841,10 @@ def _build_analysis_sheets(wb, all_campaigns, country_total_ai):
                                   is_bid_budget(ios_ai), is_new_restart(ios_ai))
 
                     if filter_structure:
-                        if not (bc in KEY_COUNTRIES or abnormal_cp or ios_c or country_ai):
+                        if bc not in KEY_COUNTRIES:
                             continue
                         parts = [ov_part]
-                        if bc not in KEY_COUNTRIES:
+                        if abnormal_cp:
                             parts.extend(abnormal_cp)
                         if ios_ov:
                             parts.append(ios_ov)
