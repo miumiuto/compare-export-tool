@@ -54,10 +54,6 @@ def _eeu_formula(col_idx, row):
     eo  = f"EEU_Others!{cl}{r}"
     kz  = f"KZ!{cl}{r}"
 
-    # Search cols R/S/T: KZ appears twice per user spec / reference file
-    if col_idx in (18, 19, 20):
-        return f'={kz}+{eeu}+{kz}+{az}'
-
     return f'={az}+{eeu}+{eo}+{kz}'
 
 
