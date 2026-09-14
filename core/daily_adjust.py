@@ -5,25 +5,6 @@ from openpyxl.utils import get_column_letter
 
 MAX_COL = 33  # A through AG
 
-# Row 1: group label start columns (1-indexed)
-_GROUP_STARTS = {
-    5:  'Newinstall',
-    13: 'Branding+boosting',
-    18: 'Search',
-    22: 'Reattribution',
-    28: 'Active',
-}
-
-# Row 2: column headers (33 items, index 0 = col A)
-_COL_HEADERS = [
-    'Day', 'Date', 'Total Spent', 'Total Imp',
-    'Spent', 'CPI', 'Install', 'Imp', 'Click', 'CTR', 'CVR', 'IR',
-    'Spent', 'Imp', 'View', 'CPV', 'CPM',
-    'Spent', 'Imp', 'Click', 'CPC',
-    'Spent', 'Imp', 'click', 'cpc', 'CPR', 'Reattributions',
-    'Spent', 'Imp', 'click', 'cpc', 'CPR', 'Reattributions',
-]
-
 # Within-row derived formulas: col_idx → rhs template (use {r} for row number)
 _DERIVED = {
     3:  'E{r}+M{r}+R{r}+V{r}+AB{r}',   # C: Total Spent
@@ -53,7 +34,6 @@ def _eeu_formula(col_idx, row):
     eeu = f"'EEU（KZ、KG、BY）'!{cl}{r}"
     eo  = f"EEU_Others!{cl}{r}"
     kz  = f"KZ!{cl}{r}"
-
     return f'={az}+{eeu}+{eo}+{kz}'
 
 
@@ -66,41 +46,53 @@ def _sa_formula(col_idx, row):
     return f'=SA!{cl}{r}+SA_IOS!{cl}{r}'
 
 
-def _build_total_sheet(ws, a1_label, formula_fn, ref_ws):
-    # Row 1: merged label + group headers
-    ws.merge_cells('A1:D1')
-    ws['A1'] = a1_label
-    for col_idx, label in _GROUP_STARTS.items():
-        ws.cell(1, col_idx, label)
-
-    # Row 2: column headers
-    for i, header in enumerate(_COL_HEADERS, 1):
-        ws.cell(2, i, header)
-
-    # Data rows: same rows as reference sheet
+def _fill_formulas(ws_new, formula_fn, ref_ws):
+    """Replace data rows (3+) with formulas; stop at first empty Date cell."""
     for r in range(3, ref_ws.max_row + 1):
         if ref_ws.cell(r, 2).value is None:
-            continue
+            break
         for col_idx in range(1, MAX_COL + 1):
-            ws.cell(r, col_idx, formula_fn(col_idx, r))
+            ws_new.cell(r, col_idx).value = formula_fn(col_idx, r)
 
 
 def process_eeu(file_bytes: bytes) -> bytes:
     """
-    1. Rename 'EEU' sheet → 'EEU（KZ、KG、BY）'
-    2. Delete 'EEU TOTAL' sheet
-    3. Insert 'EEU其他 TOTAL' at position 0 with formulas aggregating AZ + EEU（KZ、KG、BY） + EEU_Others + KZ
+    Idempotent EEU adjustment:
+      - Copy 'EEU TOTAL' (or 'AZ' as fallback) to get formatting template
+      - Delete old EEU其他 TOTAL if present
+      - Rename new copy → 'EEU其他 TOTAL', update A1 → 'CIS TOTAL'
+      - Rename 'EEU' → 'EEU（KZ、KG、BY）' if needed
+      - Delete 'EEU TOTAL' if present
+      - Fill data rows with cross-sheet formulas
+      - Move 'EEU其他 TOTAL' to position 0
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes))
 
+    # Remove stale EEU其他 TOTAL (idempotent re-run)
+    if 'EEU其他 TOTAL' in wb.sheetnames:
+        wb.remove(wb['EEU其他 TOTAL'])
+
+    # Pick formatting template: prefer EEU TOTAL, fall back to AZ
+    template = 'EEU TOTAL' if 'EEU TOTAL' in wb.sheetnames else 'AZ'
+    ws_new = wb.copy_worksheet(wb[template])
+    ws_new.title = 'EEU其他 TOTAL'
+
+    # Rename EEU → EEU（KZ、KG、BY）
     if 'EEU' in wb.sheetnames:
         wb['EEU'].title = 'EEU（KZ、KG、BY）'
 
+    # Delete original EEU TOTAL
     if 'EEU TOTAL' in wb.sheetnames:
         wb.remove(wb['EEU TOTAL'])
 
-    ws_new = wb.create_sheet('EEU其他 TOTAL', 0)
-    _build_total_sheet(ws_new, 'CIS TOTAL', _eeu_formula, wb['AZ'])
+    # Update header label and fill formulas
+    ws_new['A1'] = 'CIS TOTAL'
+    _fill_formulas(ws_new, _eeu_formula, wb['AZ'])
+
+    # Move to position 0
+    pos = wb.sheetnames.index('EEU其他 TOTAL')
+    if pos > 0:
+        wb.move_sheet('EEU其他 TOTAL', -pos)
 
     out = io.BytesIO()
     wb.save(out)
@@ -109,12 +101,25 @@ def process_eeu(file_bytes: bytes) -> bytes:
 
 def process_mena(file_bytes: bytes) -> bytes:
     """
-    Add 'SA TOTAL' sheet at end, aggregating SA + SA_IOS.
+    Idempotent MENA adjustment:
+      - Remove existing 'SA TOTAL' if present
+      - Copy 'MENA TOTAL' to get formatting template
+      - Rename copy → 'SA TOTAL', update A1 → 'SA TOTAL'
+      - Fill data rows with SA + SA_IOS formulas
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes))
 
-    ws_new = wb.create_sheet('SA TOTAL')
-    _build_total_sheet(ws_new, 'SA TOTAL', _sa_formula, wb['SA'])
+    # Remove stale SA TOTAL (idempotent re-run)
+    if 'SA TOTAL' in wb.sheetnames:
+        wb.remove(wb['SA TOTAL'])
+
+    # Copy MENA TOTAL to get all formatting
+    ws_new = wb.copy_worksheet(wb['MENA TOTAL'])
+    ws_new.title = 'SA TOTAL'
+
+    # Update header label and fill formulas
+    ws_new['A1'] = 'SA TOTAL'
+    _fill_formulas(ws_new, _sa_formula, wb['SA'])
 
     out = io.BytesIO()
     wb.save(out)
