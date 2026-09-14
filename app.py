@@ -4,6 +4,7 @@ import datetime
 import streamlit as st
 from core.feishu import load_all_data, get_campaign_period
 from core.rebuild import rebuild_from_feishu
+from core.daily_adjust import process_eeu, process_mena
 
 st.set_page_config(page_title='分析导出', layout='centered')
 
@@ -39,42 +40,106 @@ st.markdown("""
 
 st.divider()
 
-if st.button('读取飞书 · 生成导出版 →', type='primary', use_container_width=True):
-    with st.spinner('正在读取飞书区域数据…'):
-        try:
-            all_campaigns, country_total_ai = load_all_data()
-        except Exception as e:
-            st.error(f'飞书读取失败：{e}')
-            st.stop()
+tab1, tab2 = st.tabs(['数据分析导出', '日报调整'])
 
-    real_camp = sum(1 for c in all_campaigns if c['ai'] and c['ai'].strip() != '继续保持观察')
-    real_ct   = sum(1 for v in country_total_ai.values() if v and v.strip() != '继续保持观察')
-    st.success(
-        f'飞书数据读取完成：{len(all_campaigns)} 条 campaign · '
-        f'真实 AI 建议 {real_camp} 条（campaign级）+ {real_ct} 条（国家Total级）'
-    )
+# ── Tab 1: 数据分析导出 ───────────────────────────────────────────────────────
+with tab1:
+    if st.button('读取飞书 · 生成导出版 →', type='primary', use_container_width=True):
+        with st.spinner('正在读取飞书区域数据…'):
+            try:
+                all_campaigns, country_total_ai = load_all_data()
+            except Exception as e:
+                st.error(f'飞书读取失败：{e}')
+                st.stop()
 
-    with st.spinner('正在重建数据分析 sheets…'):
+        real_camp = sum(1 for c in all_campaigns if c['ai'] and c['ai'].strip() != '继续保持观察')
+        real_ct   = sum(1 for v in country_total_ai.values() if v and v.strip() != '继续保持观察')
+        st.success(
+            f'飞书数据读取完成：{len(all_campaigns)} 条 campaign · '
+            f'真实 AI 建议 {real_camp} 条（campaign级）+ {real_ct} 条（国家Total级）'
+        )
+
+        with st.spinner('正在重建数据分析 sheets…'):
+            try:
+                out_bytes = rebuild_from_feishu(all_campaigns, country_total_ai)
+            except Exception as e:
+                st.error(f'生成失败：{e}')
+                import traceback
+                with st.expander('详细错误'):
+                    st.code(traceback.format_exc())
+                st.stop()
+
+        now = datetime.datetime.now()
+        date_str, period = get_campaign_period()
+        if not date_str:
+            period = '09' if now.hour < 13 else '17'
+            date_str = now.strftime('%Y-%m-%d')
+        out_name = f'Compare-{date_str}_{period}_数据分析.xlsx'
+
+        st.download_button(
+            label=f'DOWNLOAD ↓ {out_name}',
+            data=out_bytes,
+            file_name=out_name,
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            use_container_width=True,
+        )
+
+# ── Tab 2: 日报调整 ───────────────────────────────────────────────────────────
+with tab2:
+    st.markdown("""
+    <div style="padding:16px 0 8px;">
+        <div style="font-size:1rem;font-weight:700;color:#e8e8e8;">EEU 日报调整</div>
+        <div style="font-size:.75rem;color:#666;margin-top:4px;">
+            删除 EEU TOTAL · 重命名 EEU → EEU（KZ、KG、BY） · 新增 EEU其他 TOTAL
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    eeu_file = st.file_uploader('上传 EEU 文件（pubgm_EEU_Counter_...）', type=['xlsx'], key='eeu')
+    if eeu_file:
         try:
-            out_bytes = rebuild_from_feishu(all_campaigns, country_total_ai)
+            result = process_eeu(eeu_file.read())
+            st.download_button(
+                label=f'DOWNLOAD ↓ {eeu_file.name}',
+                data=result,
+                file_name=eeu_file.name,
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                use_container_width=True,
+                key='dl_eeu',
+            )
+            st.success('EEU 处理完成')
         except Exception as e:
-            st.error(f'生成失败：{e}')
+            st.error(f'EEU 处理失败：{e}')
             import traceback
             with st.expander('详细错误'):
                 st.code(traceback.format_exc())
-            st.stop()
 
-    now = datetime.datetime.now()
-    date_str, period = get_campaign_period()
-    if not date_str:
-        period = '09' if now.hour < 13 else '17'
-        date_str = now.strftime('%Y-%m-%d')
-    out_name = f'Compare-{date_str}_{period}_数据分析.xlsx'
+    st.divider()
 
-    st.download_button(
-        label=f'DOWNLOAD ↓ {out_name}',
-        data=out_bytes,
-        file_name=out_name,
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        use_container_width=True,
-    )
+    st.markdown("""
+    <div style="padding:8px 0 8px;">
+        <div style="font-size:1rem;font-weight:700;color:#e8e8e8;">MENA 日报调整</div>
+        <div style="font-size:.75rem;color:#666;margin-top:4px;">
+            新增 SA TOTAL（= SA + SA_IOS 汇总）
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    mena_file = st.file_uploader('上传 MENA 文件（pubgm_MENA_Counter_...）', type=['xlsx'], key='mena')
+    if mena_file:
+        try:
+            result = process_mena(mena_file.read())
+            st.download_button(
+                label=f'DOWNLOAD ↓ {mena_file.name}',
+                data=result,
+                file_name=mena_file.name,
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                use_container_width=True,
+                key='dl_mena',
+            )
+            st.success('MENA 处理完成')
+        except Exception as e:
+            st.error(f'MENA 处理失败：{e}')
+            import traceback
+            with st.expander('详细错误'):
+                st.code(traceback.format_exc())
