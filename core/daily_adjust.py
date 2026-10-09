@@ -23,18 +23,29 @@ _DERIVED = {
 }
 
 
-def _eeu_formula(col_idx, row):
-    cl = get_column_letter(col_idx)
-    r  = row
-    if col_idx == 1: return f'=AZ!A{r}'
-    if col_idx == 2: return f'=AZ!B{r}'
-    if col_idx in _DERIVED: return '=' + _DERIVED[col_idx].format(r=r)
+def _make_eeu_formula_fn(wb):
+    """
+    Build a per-row formula function that only references sheets that
+    actually exist in the workbook.  The source pool is the fixed set
+    [AZ, EEU（KZ、KG、BY）, EEU_Others, KZ]; sheets absent this run are
+    silently skipped so the formula never produces #REF!.
+    """
+    candidates = ['AZ', 'EEU（KZ、KG、BY）', 'EEU_Others', 'KZ']
+    present = [s for s in candidates if s in wb.sheetnames]
 
-    az  = f"AZ!{cl}{r}"
-    eeu = f"'EEU（KZ、KG、BY）'!{cl}{r}"
-    eo  = f"EEU_Others!{cl}{r}"
-    kz  = f"KZ!{cl}{r}"
-    return f'={az}+{eeu}+{eo}+{kz}'
+    def _ref(sheet, col_letter, row):
+        needs_quote = any(ord(c) > 127 or c == ' ' for c in sheet)
+        return f"'{sheet}'!{col_letter}{row}" if needs_quote else f"{sheet}!{col_letter}{row}"
+
+    def formula_fn(col_idx, row):
+        cl = get_column_letter(col_idx)
+        r  = row
+        if col_idx == 1: return f'=AZ!A{r}'
+        if col_idx == 2: return f'=AZ!B{r}'
+        if col_idx in _DERIVED: return '=' + _DERIVED[col_idx].format(r=r)
+        return '=' + '+'.join(_ref(s, cl, r) for s in present)
+
+    return formula_fn
 
 
 def _sa_formula(col_idx, row):
@@ -85,9 +96,9 @@ def process_eeu(file_bytes: bytes) -> bytes:
     if 'EEU TOTAL' in wb.sheetnames:
         wb.remove(wb['EEU TOTAL'])
 
-    # Update header label and fill formulas
+    # Update header label and fill formulas (formula fn built after renames/deletes)
     ws_new['A1'] = 'CIS TOTAL'
-    _fill_formulas(ws_new, _eeu_formula, wb['AZ'])
+    _fill_formulas(ws_new, _make_eeu_formula_fn(wb), wb['AZ'])
 
     # Move to position 0
     pos = wb.sheetnames.index('EEU其他 TOTAL')
